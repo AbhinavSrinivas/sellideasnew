@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sell Ideas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sell Ideas API</h1>
+            <div class="auth-buttons">
+                <button class="btn btn-primary" id="loginBtn">Login</button>
+                <button class="btn btn-secondary" id="registerBtn">Register</button>
+                <button class="btn btn-success" id="addIdeaBtn" style="display: none;">Create Idea</button>
+                <button class="btn btn-danger" id="logoutBtn" style="display: none;">Logout</button>
+            </div>
+        </header>
+
+        <div class="auth-forms">
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form" style="display: none;">
+                <h2>Login</h2>
+                <form id="loginFormContent">
+                    <div class="form-group">
+                        <label>Username:</label>
+                        <input type="text" id="loginUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+                </form>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2>Register</h2>
+                <form id="registerFormContent">
+                    <div class="form-group">
+                        <label>Username:</label>
+                        <input type="text" id="registerUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email:</label>
+                        <input type="email" id="registerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="registerPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Register</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="api-response" id="ideasResponse"></div>
+
+        <div class="ideas-list" id="ideasList"></div>
+
+        <!-- Add Idea Form -->
+        <div id="addIdeaForm" style="display: none;">
+            <h2>Add New Idea</h2>
+            <form id="ideaForm">
+                <div class="form-group">
+                    <label>Title:</label>
+                    <input type="text" id="ideaTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description:</label>
+                    <textarea id="ideaDescription" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Price (USD):</label>
+                    <input type="number" id="ideaPrice" step="0.01" min="0" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Submit Idea</button>
+                <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('jwtToken');
+
+        function updateUI() {
+            const isLoggedIn = !!token;
+            document.getElementById('loginBtn').style.display = isLoggedIn ? 'none' : 'inline-block';
+            document.getElementById('registerBtn').style.display = isLoggedIn ? 'none' : 'inline-block';
+            document.getElementById('addIdeaBtn').style.display = isLoggedIn ? 'inline-block' : 'none';
+            document.getElementById('logoutBtn').style.display = isLoggedIn ? 'inline-block' : 'none';
+        }
+
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('addIdeaForm').style.display = 'none';
+        }
+
+        function showRegisterForm() {
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('addIdeaForm').style.display = 'none';
+        }
+
+        function closeForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('addIdeaForm').style.display = 'none';
+            document.getElementById('loginFormContent').reset();
+            document.getElementById('registerFormContent').reset();
+            document.getElementById('ideaForm').reset();
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Login failed');
+                }
+
+
+                token = data.token;
+                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('userName', data.user.username);
+                
+                // Show success message
+                document.getElementById('ideasResponse').innerHTML = `
+                    <p class="api-success">Successfully logged in!</p>
+                `;
+                
+                closeForm();
+                updateUI();
+                fetchIdeas();
+            } catch (error) {
+                document.getElementById('ideasResponse').innerHTML = `
+                    <p class="api-error">${error.message}</p>
+                `;
+            }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        email,
+                        password
+                    })
+                });
+
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Registration failed');
+                }
+
+                token = data.token;
+                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('userName', data.user.username);
+                
+                // Show success message
+                document.getElementById('ideasResponse').innerHTML = `
+                    <p class="api-success">Registration successful!</p>
+                `;
+                
+                closeForm();
+                updateUI();
+                fetchIdeas();
+            } catch (error) {
+                document.getElementById('ideasResponse').innerHTML = `
+                    <p class="api-error">${error.message}</p>
+                `;
+            }
+        }
+
+        async function fetchIdeas() {
+            try {
+                const response = await fetch('/api/ideas', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Error fetching ideas');
+                }
+                
+                const ideas = await response.json();
+                displayIdeas(ideas);
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        function displayIdeas(ideas) {
+            const ideasList = document.getElementById('ideasList');
+            ideasList.innerHTML = ideas.map(idea => `
+                <div class="idea-card">
+                    <h3 class="idea-title">${idea.title}</h3>
+                    <p class="idea-description">${idea.description}</p>
+                    <p class="idea-price">Price: $${idea.price.toFixed(2)}</p>
+                    <p class="idea-creator">Created by: ${idea.owner?.username || 'Unknown'}</p>
+                    ${isCurrentUserIdea(idea.owner?._id) ? 
+                        `<button class="btn btn-danger" onclick="deleteIdea('${idea._id}')">Delete</button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function isCurrentUserIdea(ownerId) {
+            if (!ownerId) return false;
+            const userId = localStorage.getItem('userId');
+            return userId === ownerId.toString();
+        }
+
+        function addIdea() {
+            document.getElementById('addIdeaForm').style.display = 'block';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'none';
+        }
+
+        async function submitIdea(event) {
+            event.preventDefault();
+            
+            const title = document.getElementById('ideaTitle').value;
+            const description = document.getElementById('ideaDescription').value;
+            const price = document.getElementById('ideaPrice').value;
+
+            try {
+                const response = await fetch('/api/ideas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        price: parseFloat(price)
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to add idea');
+                }
+
+                closeForm();
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        function showError(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<p class="api-error">${message}</p>`;
+        }
+
+        async function deleteIdea(ideaId) {
+            if (!confirm('Are you sure you want to delete this idea?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/ideas/${ideaId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to delete idea');
+                }
+
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        function logout() {
+            token = null;
+            localStorage.removeItem('jwtToken');
+            localStorage.removeItem('userName');
+            updateUI();
+            document.getElementById('ideasList').innerHTML = '';
+            document.getElementById('ideasResponse').innerHTML = `
+                <p class="api-success">Successfully logged out</p>
+            `;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateUI();
+            
+            // Event Listeners
+            document.getElementById('loginBtn').addEventListener('click', showLoginForm);
+            document.getElementById('registerBtn').addEventListener('click', showRegisterForm);
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            document.getElementById('loginFormContent').addEventListener('submit', handleLogin);
+            document.getElementById('registerFormContent').addEventListener('submit', handleRegister);
+            document.getElementById('ideaForm').addEventListener('submit', submitIdea);
+            document.getElementById('addIdeaBtn').addEventListener('click', addIdea);
+
+            // Load ideas if logged in
+            if (token) {
+                fetchIdeas();
+            }
+        });
+    </script>
+</body>
+</html>

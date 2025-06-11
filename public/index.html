@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sell Ideas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sell Ideas API</h1>
+            <div class="auth-buttons">
+                <button class="btn btn-primary" id="loginBtn">Login</button>
+                <button class="btn btn-secondary" id="registerBtn">Register</button>
+                <button class="btn btn-success" onclick="addIdea()">Create Idea</button>
+                <button class="btn btn-info" onclick="fetchIdeas()">Show Ideas</button>
+            </div>
+        </header>
+
+        <div class="auth-forms">
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form" style="display: none;">
+                <h2>Login</h2>
+                <form id="loginFormContent">
+                    <div class="form-group">
+                        <label>Username:</label>
+                        <input type="text" id="loginUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+                </form>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2>Register</h2>
+                <form id="registerFormContent">
+                    <div class="form-group">
+                        <label>Username:</label>
+                        <input type="text" id="registerUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email:</label>
+                        <input type="email" id="registerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="registerPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Register</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="ideasResponse" class="api-response">
+            <!-- Messages will be displayed here -->
+        </div>
+
+        <div id="ideasList" class="ideas-list"></div>
+
+        <!-- Add Idea Form -->
+        <div id="addIdeaForm" style="display: none;">
+            <h2>Add New Idea</h2>
+            <form id="ideaForm">
+                <div class="form-group">
+                    <label>Title:</label>
+                    <input type="text" id="ideaTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description:</label>
+                    <textarea id="ideaDescription" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Price (USD):</label>
+                    <input type="number" id="ideaPrice" step="0.01" min="0" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Submit Idea</button>
+                <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('jwtToken');
+
+        async function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
+        }
+
+        async function showRegisterForm() {
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('loginForm').style.display = 'none';
+        }
+
+        async function closeForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('addIdeaForm').style.display = 'none';
+            document.getElementById('loginFormContent').reset();
+            document.getElementById('registerFormContent').reset();
+            document.getElementById('ideaForm').reset();
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Login failed');
+                }
+
+                // Check if we have user info
+                if (!data.user || !data.user.username) {
+                    throw new Error('Invalid response from server');
+                }
+                token = data.token;
+                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('userName', data.user.username);
+                
+                // Show success message
+                showSuccess('Successfully logged in!');
+                
+                closeForm();
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+
+            // Client-side validation
+            if (!username || !email || !password) {
+                showError('registerFormContent', 'Username, email, and password are required');
+                return;
+            }
+
+            if (username.trim().length === 0 || email.trim().length === 0) {
+                showError('registerFormContent', 'Username and email must contain valid text');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('registerFormContent', 'Password must be at least 6 characters');
+                return;
+            }
+
+            console.log('Form values:', { username, email, password });
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        email,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    const error = data.error || 'Registration failed';
+                    if (error.includes('required')) {
+                        showError('registerFormContent', error);
+                    } else {
+                        throw new Error(error);
+                    }
+                }
+
+                // Check if we have user info
+                if (!data.user || !data.user.username) {
+                    throw new Error('Invalid response from server');
+                }
+                token = data.token;
+                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('userName', data.user.username);
+                
+                // Show success message
+                showSuccess('Registration successful!');
+                
+                closeForm();
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        async function fetchIdeas() {
+            try {
+                const response = await fetch('/api/ideas', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Error fetching ideas');
+                }
+                
+                const ideas = await response.json();
+                displayIdeas(ideas);
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        function displayIdeas(ideas) {
+            const ideasList = document.getElementById('ideasList');
+            const userName = localStorage.getItem('userName');
+            ideasList.innerHTML = ideas.map(idea => `
+                <div class="idea-card">
+                    <h3 class="idea-title">${idea.title}</h3>
+                    <p class="idea-description">${idea.description}</p>
+                    <p class="idea-price">Price: $${idea.price.toFixed(2)}</p>
+                    <p class="idea-creator">Created by: ${idea.owner && idea.owner.username ? idea.owner.username : 'Unknown'}</p>
+                    <button class="btn btn-danger" onclick="deleteIdea('${idea._id}')">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        async function addIdea() {
+            const form = document.getElementById('addIdeaForm');
+            form.style.display = 'block';
+        }
+
+        async function submitIdea(event) {
+            event.preventDefault();
+            
+            const title = document.getElementById('ideaTitle').value;
+            const description = document.getElementById('ideaDescription').value;
+            const price = document.getElementById('ideaPrice').value;
+
+            try {
+                const response = await fetch('/api/ideas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        price: parseFloat(price)
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to add idea');
+                }
+
+                // Close the form and refresh ideas
+                closeForm();
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        function showError(formId, message) {
+            const responseDiv = document.getElementById('ideasResponse');
+            responseDiv.innerHTML = `
+                <p class="api-error">${message}</p>
+            `;
+            
+            // Clear the error after 5 seconds
+            setTimeout(() => {
+                responseDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const responseDiv = document.getElementById('ideasResponse');
+            responseDiv.innerHTML = `
+                <p class="api-success">${message}</p>
+            `;
+            
+            // Clear the success message after 5 seconds
+            setTimeout(() => {
+                responseDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        async function deleteIdea(ideaId) {
+            try {
+                const response = await fetch(`/api/ideas/${ideaId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to delete idea');
+                }
+
+                // Refresh ideas list
+                fetchIdeas();
+            } catch (error) {
+                showError('ideasResponse', error.message);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            token = localStorage.getItem('jwtToken');
+            if (!token) {
+                showLoginForm();
+            } else {
+                fetchIdeas();
+            }
+            
+            // Add event listeners for auth buttons
+            document.getElementById('loginBtn').addEventListener('click', showLoginForm);
+            document.getElementById('registerBtn').addEventListener('click', showRegisterForm);
+            
+            // Add event listeners for forms
+            document.getElementById('loginFormContent').addEventListener('submit', handleLogin);
+            document.getElementById('registerFormContent').addEventListener('submit', handleRegister);
+            document.getElementById('ideaForm').addEventListener('submit', submitIdea);
+        });
+    </script>
+</body>
+</html>
