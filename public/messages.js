@@ -2,6 +2,8 @@
 let currentUser = null;
 let currentConversation = null;
 let currentIdea = null;
+let pollingInterval = null;
+let isPageVisible = true;
 
 // DOM Elements
 const conversationsList = document.getElementById('conversations');
@@ -15,6 +17,9 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // Check authentication on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     checkAuth();
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
@@ -22,6 +27,40 @@ document.addEventListener('DOMContentLoaded', () => {
     if (messageForm) {
         messageForm.addEventListener('submit', sendMessage);
     }
+});
+
+// Handle page visibility changes
+function handleVisibilityChange() {
+    isPageVisible = !document.hidden;
+    if (isPageVisible) {
+        // Page became visible, restart polling
+        startPolling();
+    } else {
+        // Page is hidden, stop polling
+        stopPolling();
+    }
+}
+
+// Start polling for new messages
+function startPolling() {
+    // Clear any existing interval
+    stopPolling();
+    // Set up new polling interval (30 seconds)
+    pollingInterval = setInterval(loadConversations, 30000);
+}
+
+// Stop polling
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    stopPolling();
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
 // Check if user is authenticated
@@ -50,8 +89,8 @@ async function checkAuth() {
         // Load conversations
         loadConversations();
         
-        // Set up polling for new messages
-        setInterval(loadConversations, 10000); // Refresh every 10 seconds
+        // Start polling for new messages
+        startPolling();
         
     } catch (error) {
         console.error('Authentication error:', error);
@@ -60,13 +99,21 @@ async function checkAuth() {
     }
 }
 
+// Track last loaded conversations to prevent unnecessary re-renders
+let lastConversations = [];
+
 // Load user's conversations
 async function loadConversations() {
+    if (!isPageVisible) return; // Don't load if page is not visible
+    
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/messages/conversations', {
+        const response = await fetch('/api/messages/conversations?t=' + Date.now(), {
             headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         });
         
@@ -75,16 +122,24 @@ async function loadConversations() {
         }
         
         const conversations = await response.json();
-        renderConversations(conversations);
         
-        // If we have a current conversation, refresh its messages
-        if (currentConversation) {
-            loadMessages(currentConversation);
+        // Only update if conversations have changed
+        if (JSON.stringify(conversations) !== JSON.stringify(lastConversations)) {
+            lastConversations = conversations;
+            renderConversations(conversations);
+            
+            // If we have a current conversation, refresh its messages
+            if (currentConversation) {
+                loadMessages(currentConversation);
+            }
         }
         
     } catch (error) {
         console.error('Error loading conversations:', error);
-        showMessage('Error loading conversations', 'error');
+        // Don't show error if it's just a network error during polling
+        if (!error.message.includes('Failed to fetch')) {
+            showMessage('Error loading conversations', 'error');
+        }
     }
 }
 
@@ -140,13 +195,21 @@ async function selectConversation(conversationId, otherUserId, ideaId) {
     await markMessagesAsRead(conversationId);
 }
 
+// Track last loaded messages to prevent unnecessary re-renders
+let lastMessages = [];
+
 // Load messages for a conversation
 async function loadMessages(conversationId) {
+    if (!isPageVisible) return; // Don't load if page is not visible
+    
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`/api/messages/conversation/${currentIdea}/${currentConversation}`, {
+        const response = await fetch(`/api/messages/conversation/${currentIdea}/${conversationId}?t=${Date.now()}`, {
             headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         });
         
@@ -155,11 +218,19 @@ async function loadMessages(conversationId) {
         }
         
         const messages = await response.json();
-        renderMessages(messages);
+        
+        // Only update if messages have changed
+        if (JSON.stringify(messages) !== JSON.stringify(lastMessages)) {
+            lastMessages = messages;
+            renderMessages(messages);
+        }
         
     } catch (error) {
         console.error('Error loading messages:', error);
-        showMessage('Error loading messages', 'error');
+        // Don't show error if it's just a network error during polling
+        if (!error.message.includes('Failed to fetch')) {
+            showMessage('Error loading messages', 'error');
+        }
     }
 }
 
