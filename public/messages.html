@@ -37,6 +37,10 @@
                     <p class="text-muted" id="no-messages">Select a conversation to view messages</p>
                     <!-- Messages will be loaded here -->
                 </div>
+                <!-- Typing indicator -->
+                <div id="typing-indicator" style="display: none; padding: 0 1rem 0.5rem; color: #A0AEC0; font-style: italic;">
+                    Typing...
+                </div>
 
                 <div class="message-input" style="display: none;">
                     <form id="sendMessageForm">
@@ -50,6 +54,8 @@
         </div>
     </div>
 
+    <!-- Add Socket.IO client -->
+    <script src="/socket.io/socket.io.js"></script>
     <script src="messages.js"></script>
 </body>
 </html>

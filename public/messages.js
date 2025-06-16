@@ -2,8 +2,9 @@
 let currentUser = null;
 let currentConversation = null;
 let currentIdea = null;
-let pollingInterval = null;
-let isPageVisible = true;
+let socket = null;
+let isTyping = false;
+let typingTimeout = null;
 
 // DOM Elements
 const conversationsList = document.getElementById('conversations');
@@ -17,17 +18,110 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // Check authentication on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // Add visibility change listener
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
     checkAuth();
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
     }
     if (messageForm) {
         messageForm.addEventListener('submit', sendMessage);
+        // Add typing indicator
+        messageInput.addEventListener('input', handleTyping);
     }
 });
+
+// Initialize WebSocket connection
+function initSocket() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    
+    // Connect to WebSocket server
+    socket = io({
+        auth: { token },
+        transports: ['websocket'],
+        upgrade: false
+    });
+    
+    // Connection established
+    socket.on('connect', () => {
+        console.log('Connected to WebSocket server');
+    });
+    
+    // Handle new message
+    socket.on('new-message', (message) => {
+        // Only add if it's for the current conversation
+        if (currentConversation === message.conversationId) {
+            appendMessage(message);
+            // Mark as read if it's the current user's conversation
+            markMessagesAsRead(currentConversation);
+        }
+        // Update conversations list
+        updateConversationInList(message);
+    });
+    
+    // Handle read receipts
+    socket.on('mark-messages-read', ({ conversationId }) => {
+        if (currentConversation === conversationId) {
+            document.querySelectorAll('.message.received').forEach(msg => {
+                msg.classList.add('read');
+            });
+        }
+    });
+    
+    // Handle typing indicator
+    socket.on('user-typing', ({ userId, isTyping }) => {
+        if (currentConversation && currentConversation.includes(userId)) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.style.display = isTyping ? 'block' : 'none';
+            }
+        }
+    });
+    
+    // Handle connection errors
+    socket.on('connect_error', (error) => {
+        console.error('WebSocket connection error:', error);
+        showMessage('Connection error. Trying to reconnect...', 'error');
+    });
+    
+    // Handle reconnection
+    socket.on('reconnect', () => {
+        console.log('Reconnected to WebSocket server');
+        showMessage('Connection restored', 'success');
+    });
+}
+
+// Handle typing indicator
+function handleTyping() {
+    if (!socket || !currentConversation || !currentUser) return;
+    
+    // Clear previous timeout
+    if (typingTimeout) clearTimeout(typingTimeout);
+    
+    // User is typing
+    if (!isTyping) {
+        isTyping = true;
+        const recipientId = getOtherUserIdFromConversation(currentConversation);
+        if (recipientId) {
+            socket.emit('typing', { recipientId, isTyping: true });
+        }
+    }
+    
+    // Set timeout to stop typing indicator after 2 seconds of inactivity
+    typingTimeout = setTimeout(() => {
+        isTyping = false;
+        const recipientId = getOtherUserIdFromConversation(currentConversation);
+        if (recipientId) {
+            socket.emit('typing', { recipientId, isTyping: false });
+        }
+    }, 2000);
+}
+
+// Get other user ID from conversation ID
+function getOtherUserIdFromConversation(conversationId) {
+    if (!conversationId || !currentUser) return null;
+    const parts = conversationId.split('-');
+    return parts[0] === currentUser.id ? parts[1] : parts[0];
+}
 
 // Handle page visibility changes
 function handleVisibilityChange() {
@@ -59,8 +153,9 @@ function stopPolling() {
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
-    stopPolling();
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (socket) {
+        socket.disconnect();
+    }
 });
 
 // Check if user is authenticated
@@ -89,8 +184,8 @@ async function checkAuth() {
         // Load conversations
         loadConversations();
         
-        // Start polling for new messages
-        startPolling();
+        // Initialize WebSocket connection
+        initSocket();
         
     } catch (error) {
         console.error('Authentication error:', error);
@@ -265,35 +360,80 @@ async function sendMessage(e) {
     e.preventDefault();
     
     const content = messageInput.value.trim();
-    if (!content || !currentConversation) return;
+    if (!content || !currentConversation || !socket) return;
+    
+    const recipientId = document.querySelector('.conversation-item.active')?.getAttribute('data-other-user-id');
+    if (!recipientId) return;
     
     try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                recipientId: document.querySelector('.conversation-item.active').getAttribute('data-other-user-id'),
-                content,
-                ideaId: currentIdea
-            })
+        // Emit message via WebSocket
+        socket.emit('send-message', {
+            recipientId,
+            content,
+            ideaId: currentIdea
         });
         
-        if (!response.ok) {
-            throw new Error('Failed to send message');
-        }
-        
-        // Clear input and refresh messages
+        // Clear input
         messageInput.value = '';
-        await loadMessages(currentConversation);
-        await loadConversations();
+        
+        // Stop typing indicator
+        if (typingTimeout) clearTimeout(typingTimeout);
+        isTyping = false;
         
     } catch (error) {
         console.error('Error sending message:', error);
         showMessage('Error sending message', 'error');
+    }
+}
+
+// Append a single message to the UI
+function appendMessage(message) {
+    const messagesContainer = document.getElementById('messages');
+    const isCurrentUser = message.sender._id === currentUser.id;
+    const messageDate = new Date(message.createdAt).toLocaleString();
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${isCurrentUser ? 'sent' : 'received'}`;
+    messageElement.dataset.id = message._id;
+    messageElement.innerHTML = `
+        <div class="message-content">
+            ${!isCurrentUser ? `<div class="message-sender">${message.sender.username}</div>` : ''}
+            <div class="message-text">${message.content}</div>
+            <div class="message-time">${messageDate}</div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(messageElement);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Update conversation in the conversations list
+function updateConversationInList(message) {
+    const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${message.conversationId}"]`);
+    if (conversationItem) {
+        // Update last message preview
+        const preview = conversationItem.querySelector('.conversation-preview');
+        if (preview) {
+            const isCurrentUser = message.sender._id === currentUser.id;
+            preview.textContent = (isCurrentUser ? 'You: ' : '') + 
+                                (message.content.length > 30 ? message.content.substring(0, 30) + '...' : message.content);
+        }
+        
+        // Update timestamp
+        const timeElement = conversationItem.querySelector('.conversation-time');
+        if (timeElement) {
+            timeElement.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // Move to top if not active
+        if (currentConversation !== message.conversationId) {
+            conversationItem.classList.add('unread');
+            const conversationsList = document.getElementById('conversations');
+            conversationsList.insertBefore(conversationItem, conversationsList.firstChild);
+        }
+    } else {
+        // If conversation doesn't exist in the list, reload conversations
+        loadConversations();
     }
 }
 
