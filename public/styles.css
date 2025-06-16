@@ -1,146 +1,246 @@
-/* Global Styles */
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 20px;
-    background-color: #f5f5f5;
-    color: #333;
+/* MongoDB-inspired Dark Theme */
+:root {
+    --mongodb-green: #13AA52;
+    --mongodb-dark: #001E2B;
+    --mongodb-darker: #00141E;
+    --mongodb-light: #F7F7F7;
+    --mongodb-gray: #6B7280;
+    --mongodb-card-bg: #0A1E28;
+    --mongodb-border: #1E3A4D;
+    --mongodb-accent: #00ED64;
 }
 
+/* Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+    background-color: var(--mongodb-darker);
+    color: var(--mongodb-light);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+}
+
+h1 {
+    font-size: 2.5rem;
+    background: linear-gradient(90deg, var(--mongodb-accent), var(--mongodb-green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 2rem;
+}
+
+/* Layout */
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    background-color: white;
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 2rem 1.5rem;
 }
 
 /* Header */
 header {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-h1 {
-    color: #2c3e50;
-    margin-bottom: 10px;
+    background-color: var(--mongodb-dark);
+    border-bottom: 1px solid var(--mongodb-border);
+    padding: 1rem 0;
+    margin-bottom: 2rem;
 }
 
 /* Buttons */
 .btn {
-    display: inline-block;
-    padding: 10px 20px;
-    margin: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
     cursor: pointer;
-    font-size: 16px;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    margin: 0.25rem;
 }
 
 .btn-primary {
-    background-color: #3498db;
+    background-color: var(--mongodb-green);
     color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0f8a42;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(19, 170, 82, 0.3);
 }
 
 .btn-secondary {
-    background-color: #2ecc71;
-    color: white;
+    background-color: transparent;
+    border: 1px solid var(--mongodb-green);
+    color: var(--mongodb-green);
 }
 
-.btn-danger {
-    background-color: #e74c3c;
-    color: white;
-}
-
-.btn:hover {
-    opacity: 0.9;
+.btn-secondary:hover {
+    background-color: rgba(19, 170, 82, 0.1);
     transform: translateY(-2px);
 }
 
-/* API Response Area */
-.api-response {
-    margin-top: 20px;
-    padding: 20px;
-    background-color: #f8f9fa;
-    border-radius: 5px;
-    border: 1px solid #dee2e6;
+.btn-danger {
+    background-color: #E53E3E;
+    color: white;
 }
 
-/* Ideas List */
-.ideas-list {
-    margin-top: 30px;
+.btn-danger:hover {
+    background-color: #C53030;
+    transform: translateY(-2px);
 }
 
+/* Cards */
 .idea-card {
-    background-color: #fff;
-    padding: 20px;
-    margin-bottom: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    background-color: var(--mongodb-card-bg);
+    border: 1px solid var(--mongodb-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.idea-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 .idea-title {
-    color: #2c3e50;
-    margin-bottom: 10px;
+    color: white;
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .idea-description {
-    color: #666;
-    line-height: 1.6;
+    color: #A0AEC0;
+    margin-bottom: 1rem;
+    line-height: 1.7;
 }
 
 .idea-price {
-    margin-top: 10px;
-    color: #2ecc71;
-    font-weight: bold;
+    color: var(--mongodb-accent);
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin: 0.5rem 0;
 }
 
 .idea-creator {
-    margin-top: 5px;
-    color: #3498db;
-    font-style: italic;
+    color: #718096;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
 }
 
-/* Form Groups */
+/* Forms */
 .form-group {
-    margin-bottom: 15px;
+    margin-bottom: 1.5rem;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 5px;
-    color: #333;
+    margin-bottom: 0.5rem;
+    color: #CBD5E0;
+    font-weight: 500;
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
     width: 100%;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 16px;
+    padding: 0.75rem 1rem;
+    background-color: var(--mongodb-dark);
+    border: 1px solid var(--mongodb-border);
+    border-radius: 6px;
+    color: white;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--mongodb-green);
+    box-shadow: 0 0 0 3px rgba(19, 170, 82, 0.2);
 }
 
 .form-group textarea {
-    height: 100px;
+    min-height: 120px;
     resize: vertical;
 }
 
-/* API Error */
+/* Messages */
+.api-response {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
 .api-error {
-    color: #e74c3c;
-    margin-top: 10px;
-    padding: 10px;
-    background-color: #fdf0f0;
-    border-radius: 5px;
+    background-color: #FED7D7;
+    color: #C53030;
+    border-left: 4px solid #E53E3E;
 }
 
 .api-success {
-    color: #2ecc71;
-    margin-top: 10px;
-    padding: 10px;
-    background-color: #f0fdf0;
-    border-radius: 5px;
+    background-color: #C6F6D5;
+    color: #2F855A;
+    border-left: 4px solid #38A169;
+}
+
+/* Navigation */
+.nav-links {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.nav-links a {
+    color: #CBD5E0;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.nav-links a:hover {
+    color: white;
+}
+
+/* Utility Classes */
+.text-muted {
+    color: #A0AEC0;
+}
+
+.mt-4 { margin-top: 1rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mt-8 { margin-top: 2rem; }
+.mb-8 { margin-bottom: 2rem; }
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .btn {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+    }
 }
