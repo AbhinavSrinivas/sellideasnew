@@ -64,6 +64,9 @@
 
         <div id="ideasList" class="ideas-list"></div>
 
+        <!-- Include messages.js -->
+        <script src="messages.js"></script>
+
         <!-- Add Idea Form -->
         <div id="addIdeaForm" style="display: none;">
             <h2>Add New Idea</h2>
@@ -240,16 +243,36 @@
 
         function displayIdeas(ideas) {
             const ideasList = document.getElementById('ideasList');
-            const userName = localStorage.getItem('userName');
-            ideasList.innerHTML = ideas.map(idea => `
-                <div class="idea-card">
+            const currentUser = localStorage.getItem('userName');
+            ideasList.innerHTML = ideas.map(idea => renderIdea(idea, currentUser)).join('');
+        }
+
+        function renderIdea(idea, currentUser) {
+            const isOwner = currentUser && idea.owner && idea.owner._id === currentUser;
+            const ownerName = idea.owner ? idea.owner.username : 'Unknown';
+            const isLoggedIn = !!currentUser;
+            const isNotOwnIdea = !isOwner && isLoggedIn;
+            
+            return `
+                <div class="idea-card" data-id="${idea._id}">
                     <h3 class="idea-title">${idea.title}</h3>
                     <p class="idea-description">${idea.description}</p>
-                    <p class="idea-price">Price: $${idea.price.toFixed(2)}</p>
-                    <p class="idea-creator">Created by: ${idea.owner && idea.owner.username ? idea.owner.username : 'Unknown'}</p>
-                    <button class="btn btn-danger" onclick="deleteIdea('${idea._id}')">Delete</button>
+                    <div class="idea-meta">
+                        <span class="idea-price">$${idea.price}</span>
+                        <span class="idea-creator">By: ${ownerName}</span>
+                    </div>
+                    <div class="idea-actions">
+                        ${isOwner ? `
+                            <button class="btn btn-danger" onclick="deleteIdea('${idea._id}')">Delete</button>
+                        ` : ''}
+                        ${isNotOwnIdea ? `
+                            <button class="btn btn-primary" onclick="startNewConversation('${idea._id}', '${idea.owner._id}')">
+                                Message
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
-            `).join('');
+            `;
         }
 
         async function addIdea() {

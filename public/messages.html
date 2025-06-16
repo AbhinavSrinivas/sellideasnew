@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages - Sell Ideas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Messages</h1>
+            <div class="auth-buttons">
+                <button class="btn btn-primary" onclick="window.location.href='index.html'">Back to Ideas</button>
+                <button class="btn btn-danger" id="logoutBtn">Logout</button>
+            </div>
+        </header>
+
+        <div class="messages-container">
+            <!-- Conversations List -->
+            <div class="conversations-list">
+                <h2>Conversations</h2>
+                <div id="conversations">
+                    <!-- Conversations will be loaded here -->
+                    <p class="text-muted">Loading conversations...</p>
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="messages-area">
+                <div id="messages-header">
+                    <h2 id="conversation-title">Select a conversation</h2>
+                    <p id="idea-title" class="text-muted"></p>
+                </div>
+                
+                <div id="messages">
+                    <p class="text-muted" id="no-messages">Select a conversation to view messages</p>
+                    <!-- Messages will be loaded here -->
+                </div>
+
+                <div class="message-input" style="display: none;">
+                    <form id="sendMessageForm">
+                        <div class="form-group">
+                            <textarea id="messageContent" placeholder="Type your message..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Send</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="messages.js"></script>
+</body>
+</html>

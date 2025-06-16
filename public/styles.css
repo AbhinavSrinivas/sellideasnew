@@ -219,6 +219,172 @@ header {
     color: white;
 }
 
+/* Messaging Styles */
+.messages-container {
+    display: flex;
+    height: calc(100vh - 150px);
+    border: 1px solid var(--mongodb-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.conversations-list {
+    width: 350px;
+    border-right: 1px solid var(--mongodb-border);
+    background-color: var(--mongodb-card-bg);
+    overflow-y: auto;
+}
+
+.conversations-list h2 {
+    padding: 1rem;
+    margin: 0;
+    border-bottom: 1px solid var(--mongodb-border);
+    background-color: var(--mongodb-dark);
+}
+
+.conversation-item {
+    padding: 1rem;
+    border-bottom: 1px solid var(--mongodb-border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.conversation-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.conversation-item.active {
+    background-color: rgba(19, 170, 82, 0.1);
+    border-left: 3px solid var(--mongodb-green);
+}
+
+.conversation-item.unread {
+    background-color: rgba(19, 170, 82, 0.05);
+}
+
+.conversation-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.conversation-user {
+    font-weight: 600;
+    color: white;
+}
+
+.conversation-date {
+    font-size: 0.8rem;
+    color: var(--mongodb-text-light);
+}
+
+.conversation-preview {
+    color: var(--mongodb-text-light);
+    margin: 0.5rem 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conversation-idea {
+    font-size: 0.8rem;
+    color: var(--mongodb-green);
+    margin: 0.25rem 0 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.messages-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mongodb-dark);
+}
+
+#messages-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--mongodb-border);
+    background-color: var(--mongodb-card-bg);
+}
+
+#messages {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.message {
+    max-width: 70%;
+    margin-bottom: 1rem;
+}
+
+.message.sent {
+    align-self: flex-end;
+}
+
+.message.received {
+    align-self: flex-start;
+}
+
+.message-content {
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    position: relative;
+}
+
+.message.sent .message-content {
+    background-color: var(--mongodb-green);
+    color: var(--mongodb-dark);
+    border-bottom-right-radius: 0.25rem;
+}
+
+.message.received .message-content {
+    background-color: var(--mongodb-card-bg);
+    border: 1px solid var(--mongodb-border);
+    border-bottom-left-radius: 0.25rem;
+}
+
+.message-sender {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--mongodb-green);
+}
+
+.message-time {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    text-align: right;
+    color: var(--mongodb-text-light);
+}
+
+.message-input {
+    padding: 1rem;
+    border-top: 1px solid var(--mongodb-border);
+    background-color: var(--mongodb-card-bg);
+}
+
+.message-input textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 0.75rem;
+    border: 1px solid var(--mongodb-border);
+    border-radius: 6px;
+    background-color: var(--mongodb-dark);
+    color: white;
+    resize: none;
+    margin-bottom: 0.5rem;
+}
+
+.message-input textarea:focus {
+    outline: none;
+    border-color: var(--mongodb-green);
+    box-shadow: 0 0 0 2px rgba(19, 170, 82, 0.2);
+}
+
 /* Utility Classes */
 .text-muted {
     color: #A0AEC0;

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const authRoutes = require('./routes/auth');
 const ideaRoutes = require('./routes/ideas');
+const messageRoutes = require('./routes/messages');
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ mongoose.connect(MONGODB_URI, {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/ideas', ideaRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Serve static files
 app.use(express.static('public'));
