@@ -1,10 +1,28 @@
+// API base URL (define once globally)
+window.API_BASE_URL = window.API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = window.API_BASE_URL;
+
 // Global variables
+let isPageVisible = !document.hidden; // Track page visibility
 let currentUser = null;
 let currentConversation = null;
+let pollingInterval = null;
 let currentIdea = null;
+let currentOtherUserId = null; // the user on the other side of the conversation
 let socket = null;
 let isTyping = false;
 let typingTimeout = null;
+let messageBatch = [];
+let batchTimeout = null;
+const BATCH_DELAY = 50; // ms between batch updates
+let isProcessingBatch = false;
+
+// Diagnostics
+let messageEventCount = 0;
+let messageEventRate = 0;
+let messageCountDisplay = null;
+let eventRateDisplay = null;
+const MESSAGE_LIMIT = 50;
 
 // DOM Elements
 const conversationsList = document.getElementById('conversations');
@@ -18,7 +36,11 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // Check authentication on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Add diagnostics UI
+    addDiagnosticsUI();
     checkAuth();
+    // Listen for page visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
     }
@@ -46,17 +68,80 @@ function initSocket() {
         console.log('Connected to WebSocket server');
     });
     
-    // Handle new message
+    // Handle new message with batching
     socket.on('new-message', (message) => {
-        // Only add if it's for the current conversation
-        if (currentConversation === message.conversationId) {
-            appendMessage(message);
-            // Mark as read if it's the current user's conversation
-            markMessagesAsRead(currentConversation);
+        messageEventCount++;
+        const recvTime = performance.now();
+        //console.log('[PERF] new-message event received', { id: message._id, recvTime });
+        // Add to batch
+        messageBatch.push({ ...message, _recvTime: recvTime });
+        
+        // Process batch if not already processing
+        if (!isProcessingBatch) {
+            processMessageBatch();
         }
-        // Update conversations list
-        updateConversationInList(message);
     });
+    
+    // Process messages in batches to reduce re-renders
+    function processMessageBatch() {
+        if (messageBatch.length === 0) {
+            isProcessingBatch = false;
+            return;
+        }
+        
+        isProcessingBatch = true;
+        const batchStart = performance.now();
+        
+        // Process all messages in the current batch
+        const processedMessages = new Set();
+        const currentBatch = [];
+        
+        // Deduplicate messages (in case of any duplicates)
+        while (messageBatch.length > 0) {
+            const msg = messageBatch.shift();
+            if (!processedMessages.has(msg._id)) {
+                processedMessages.add(msg._id);
+                currentBatch.push(msg);
+            }
+        }
+        
+        // Process each message in the batch
+        currentBatch.forEach(message => {
+            // Only add if it's for the current conversation
+            if (currentConversation === message.conversationId) {
+                const beforeRender = performance.now();
+                appendMessage(message);
+                const afterRender = performance.now();
+                if (message._recvTime) {
+                    console.log(`[PERF] Message ${message._id} latency:`, {
+                        recvToRender: beforeRender - message._recvTime,
+                        renderTime: afterRender - beforeRender
+                    });
+                }
+                // Mark as read if it's the current user's conversation
+                markMessagesAsRead(currentConversation);
+            }
+            // Update conversations list
+            const beforeUpdate = performance.now();
+            updateConversationInList(message);
+            const afterUpdate = performance.now();
+            if (afterUpdate - beforeUpdate > 10) {
+                console.log(`[PERF] updateConversationInList slow for ${message._id}:`, afterUpdate - beforeUpdate, 'ms');
+            }
+        });
+        
+        const batchEnd = performance.now();
+        if (batchEnd - batchStart > 10) {
+            console.log(`[PERF] Batch processing time:`, batchEnd - batchStart, 'ms for', currentBatch.length, 'messages');
+        }
+        
+        // Schedule next batch if needed
+        if (messageBatch.length > 0) {
+            setTimeout(processMessageBatch, BATCH_DELAY);
+        } else {
+            isProcessingBatch = false;
+        }
+    }
     
     // Handle read receipts
     socket.on('mark-messages-read', ({ conversationId }) => {
@@ -162,24 +247,38 @@ window.addEventListener('beforeunload', () => {
 async function checkAuth() {
     const token = localStorage.getItem('token');
     if (!token) {
-        window.location.href = 'index.html';
+        showMessage('No authentication token found. Redirecting to login...', 'error');
+        setTimeout(() => {
+            // No redirect. Only show error message.
+        }, 3000);
         return;
     }
     
     try {
         // Verify token and get current user
-        const response = await fetch('/api/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
         
         if (!response.ok) {
-            throw new Error('Not authenticated');
+            const errorText = await response.text();
+            showMessage(`Auth failed: ${response.status} ${errorText}. Redirecting to login...`, 'error');
+            setTimeout(() => {
+                // No redirect. Only show error message.
+            }, 3000);
+            return;
         }
         
         const user = await response.json();
         currentUser = user;
+        if (!currentUser || !currentUser._id) {
+            showMessage('Invalid user object received from server. Logging out...', 'error');
+            // No redirect. Show error and stop.
+            localStorage.removeItem('token');
+            return;
+        }
         
         // Load conversations
         loadConversations();
@@ -188,9 +287,10 @@ async function checkAuth() {
         initSocket();
         
     } catch (error) {
-        console.error('Authentication error:', error);
-        localStorage.removeItem('token');
-        window.location.href = 'index.html';
+        showMessage(`Authentication error: ${error.message}. Redirecting to login...`, 'error');
+        setTimeout(() => {
+            // No redirect. Only show error message.
+        }, 3000);
     }
 }
 
@@ -199,11 +299,16 @@ let lastConversations = [];
 
 // Load user's conversations
 async function loadConversations() {
+    if (!currentUser || !currentUser._id) {
+        showMessage('Cannot load conversations: user is null or missing _id. Logging out...', 'error');
+        // No redirect. Show error and stop.
+        localStorage.removeItem('token');
+    }
     if (!isPageVisible) return; // Don't load if page is not visible
     
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/messages/conversations?t=' + Date.now(), {
+        const response = await fetch(`${API_BASE_URL}/api/messages/conversations?t=${Date.now()}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -224,8 +329,8 @@ async function loadConversations() {
             renderConversations(conversations);
             
             // If we have a current conversation, refresh its messages
-            if (currentConversation) {
-                loadMessages(currentConversation);
+            if (currentConversation && currentOtherUserId) {
+                loadMessages(currentOtherUserId);
             }
         }
         
@@ -251,7 +356,8 @@ function renderConversations(conversations) {
                         conv.lastMessage.sender._id !== currentUser._id;
         
         return `
-            <div class="conversation-item ${isUnread ? 'unread' : ''} ${currentConversation === conv._id ? 'active' : ''}" 
+            <div class="conversation-item ${isUnread ? 'unread' : ''} ${currentConversation === conv._id ? 'active' : ''}"
+                 data-conversation-id="${conv._id}" data-other-user-id="${conv.otherUser._id}"
                  onclick="selectConversation('${conv._id}', '${conv.otherUser._id}', '${conv.idea._id}')">
                 <div class="conversation-header">
                     <span class="conversation-user">${conv.otherUser.username}</span>
@@ -269,6 +375,7 @@ function renderConversations(conversations) {
 
 // Select a conversation
 async function selectConversation(conversationId, otherUserId, ideaId) {
+    currentOtherUserId = otherUserId;
     currentConversation = conversationId;
     currentIdea = ideaId;
     
@@ -283,8 +390,8 @@ async function selectConversation(conversationId, otherUserId, ideaId) {
     // Show message input
     messageInputContainer.style.display = 'block';
     
-    // Load messages for this conversation
-    await loadMessages(conversationId);
+    // Load messages with other user
+    await loadMessages(otherUserId);
     
     // Mark messages as read
     await markMessagesAsRead(conversationId);
@@ -294,12 +401,12 @@ async function selectConversation(conversationId, otherUserId, ideaId) {
 let lastMessages = [];
 
 // Load messages for a conversation
-async function loadMessages(conversationId) {
+async function loadMessages(otherUserId) {
     if (!isPageVisible) return; // Don't load if page is not visible
     
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`/api/messages/conversation/${currentIdea}/${conversationId}?t=${Date.now()}`, {
+        const response = await fetch(`${API_BASE_URL}/api/messages/conversation/${currentIdea}/${otherUserId}?t=${Date.now()}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -386,54 +493,207 @@ async function sendMessage(e) {
     }
 }
 
-// Append a single message to the UI
+// Cache for message elements to reduce DOM queries
+const messageCache = new Map();
+let lastScrollPosition = 0;
+let shouldAutoScroll = true;
+
+// Append a single message to the UI with optimizations
 function appendMessage(message) {
     const messagesContainer = document.getElementById('messages');
+    if (!messagesContainer) return;
+    
+    // Limit to MESSAGE_LIMIT messages in DOM
+    while (messagesContainer.children.length >= MESSAGE_LIMIT) {
+        const rm = messagesContainer.firstChild;
+        if (rm && rm.classList && rm.classList.contains('message')) {
+            messagesContainer.removeChild(rm);
+        } else {
+            break;
+        }
+    }
+
     const isCurrentUser = message.sender._id === currentUser.id;
     const messageDate = new Date(message.createdAt).toLocaleString();
     
+    // Check if message already exists in the DOM
+    if (messageCache.has(message._id)) {
+        updateMessageCountDisplay();
+        return;
+    }
+    
+    // Create document fragment for better performance
+    const fragment = document.createDocumentFragment();
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isCurrentUser ? 'sent' : 'received'}`;
     messageElement.dataset.id = message._id;
+    
+    // Create message content using template literals
     messageElement.innerHTML = `
         <div class="message-content">
-            ${!isCurrentUser ? `<div class="message-sender">${message.sender.username}</div>` : ''}
-            <div class="message-text">${message.content}</div>
-            <div class="message-time">${messageDate}</div>
+            ${!isCurrentUser ? `<div class="message-sender">${escapeHtml(message.sender.username)}</div>` : ''}
+            <div class="message-text">${escapeHtml(message.content)}</div>
+            <div class="message-time">${escapeHtml(messageDate)}</div>
         </div>
     `;
     
-    messagesContainer.appendChild(messageElement);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Add to fragment
+    fragment.appendChild(messageElement);
+    
+    // Check if we should auto-scroll
+    const wasNearBottom = isNearBottom(messagesContainer);
+    
+    // Add to DOM
+    messagesContainer.appendChild(fragment);
+    
+    // Cache the message
+    messageCache.set(message._id, messageElement);
+    
+    // Auto-scroll if near bottom or if it's the current user's message
+    if (wasNearBottom || isCurrentUser) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Limit cache size
+    if (messageCache.size > 100) {
+        const firstKey = messageCache.keys().next().value;
+        messageCache.delete(firstKey);
+    }
+    
+    updateMessageCountDisplay();
 }
 
-// Update conversation in the conversations list
+function updateMessageCountDisplay() {
+    if (messageCountDisplay) {
+        const messagesContainer = document.getElementById('messages');
+        messageCountDisplay.textContent = `Messages in DOM: ${messagesContainer ? messagesContainer.children.length : 0}`;
+    }
+}
+
+// Simple HTML escaping to prevent XSS
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Check if scroll is near bottom
+function isNearBottom(element) {
+    if (!element) return true;
+    return element.scrollTop + element.clientHeight >= element.scrollHeight - 100;
+}
+
+// Add diagnostics UI to the page
+function addDiagnosticsUI() {
+    let header = document.getElementById('diagnostics-header');
+    if (!header) {
+        header = document.createElement('div');
+        header.id = 'diagnostics-header';
+        header.style.position = 'fixed';
+        header.style.top = '0';
+        header.style.left = '0';
+        header.style.right = '0';
+        header.style.zIndex = '9999';
+        header.style.background = '#222';
+        header.style.color = '#0f0';
+        header.style.fontSize = '14px';
+        header.style.padding = '2px 8px';
+        header.style.display = 'flex';
+        header.style.gap = '2rem';
+        document.body.appendChild(header);
+    }
+    messageCountDisplay = document.createElement('span');
+    eventRateDisplay = document.createElement('span');
+    header.appendChild(messageCountDisplay);
+    header.appendChild(eventRateDisplay);
+    updateMessageCountDisplay();
+    updateEventRateDisplay();
+    setInterval(updateEventRateDisplay, 1000);
+}
+
+function updateEventRateDisplay() {
+    eventRateDisplay.textContent = `new-message/sec: ${messageEventRate}`;
+    messageEventRate = messageEventCount;
+    messageEventCount = 0;
+}
+
+
+// Cache for conversation items
+const conversationCache = new Map();
+
+// Update conversation in the conversations list with optimizations
 function updateConversationInList(message) {
-    const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${message.conversationId}"]`);
+    if (!message || !message.conversationId) return;
+    
+    const conversationId = message.conversationId;
+    let conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+    
     if (conversationItem) {
-        // Update last message preview
-        const preview = conversationItem.querySelector('.conversation-preview');
-        if (preview) {
-            const isCurrentUser = message.sender._id === currentUser.id;
-            preview.textContent = (isCurrentUser ? 'You: ' : '') + 
-                                (message.content.length > 30 ? message.content.substring(0, 30) + '...' : message.content);
+        // Use cached elements if available
+        let preview, timeElement;
+        
+        if (conversationCache.has(conversationId)) {
+            const cache = conversationCache.get(conversationId);
+            preview = cache.preview;
+            timeElement = cache.timeElement;
+        } else {
+            preview = conversationItem.querySelector('.conversation-preview');
+            timeElement = conversationItem.querySelector('.conversation-time');
+            conversationCache.set(conversationId, { preview, timeElement });
         }
         
-        // Update timestamp
-        const timeElement = conversationItem.querySelector('.conversation-time');
-        if (timeElement) {
-            timeElement.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        
-        // Move to top if not active
-        if (currentConversation !== message.conversationId) {
-            conversationItem.classList.add('unread');
-            const conversationsList = document.getElementById('conversations');
-            conversationsList.insertBefore(conversationItem, conversationsList.firstChild);
-        }
+        // Batch DOM updates
+        requestAnimationFrame(() => {
+            // Update last message preview
+            if (preview) {
+                const isCurrentUser = message.sender._id === currentUser.id;
+                const content = message.content || '';
+                const previewText = (isCurrentUser ? 'You: ' : '') + 
+                                  (content.length > 30 ? content.substring(0, 30) + '...' : content);
+                
+                if (preview.textContent !== previewText) {
+                    preview.textContent = previewText;
+                }
+            }
+            
+            // Update timestamp
+            if (timeElement) {
+                const newTime = new Date(message.createdAt).toLocaleTimeString([], { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                if (timeElement.textContent !== newTime) {
+                    timeElement.textContent = newTime;
+                }
+            }
+            
+            // Move to top if not active
+            if (currentConversation !== conversationId) {
+                if (!conversationItem.classList.contains('unread')) {
+                    conversationItem.classList.add('unread');
+                }
+                
+                const conversationsList = document.getElementById('conversations');
+                if (conversationsList && conversationsList.firstChild !== conversationItem) {
+                    conversationsList.insertBefore(conversationItem, conversationsList.firstChild);
+                }
+            }
+        });
     } else {
         // If conversation doesn't exist in the list, reload conversations
-        loadConversations();
+        // but debounce to prevent rapid reloads
+        if (!this._reloadTimeout) {
+            this._reloadTimeout = setTimeout(() => {
+                loadConversations();
+                this._reloadTimeout = null;
+            }, 500);
+        }
     }
 }
 
@@ -441,7 +701,7 @@ function updateConversationInList(message) {
 async function markMessagesAsRead(conversationId) {
     try {
         const token = localStorage.getItem('token');
-        await fetch(`/api/messages/read/${conversationId}`, {
+        await fetch(`${API_BASE_URL}/api/messages/read/${conversationId}`, {
             method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -469,7 +729,7 @@ function showMessage(message, type = 'success') {
 // Handle logout
 function handleLogout() {
     localStorage.removeItem('token');
-    window.location.href = 'index.html';
+    // No redirect. Only show error message.
 }
 
 // Start a new conversation
@@ -480,7 +740,7 @@ async function startNewConversation(ideaId, recipientId) {
         const token = localStorage.getItem('token');
         
         // Create a new conversation
-        const response = await fetch('/api/messages', {
+        const response = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

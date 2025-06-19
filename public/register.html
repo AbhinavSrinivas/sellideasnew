@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - Sell Ideas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container auth-container">
+    <h2>Register</h2>
+    <form id="register-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="new-password">
+      </div>
+      <button type="submit">Register</button>
+    </form>
+    <div id="register-message" class="message"></div>
+    <p>Already have an account? <a href="index.html">Login</a></p>
+  </div>
+  <script>
+    const form = document.getElementById('register-form');
+    const messageDiv = document.getElementById('register-message');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      messageDiv.textContent = '';
+      const username = form.username.value.trim();
+      const email = form.email.value.trim();
+      const password = form.password.value;
+      try {
+        const response = await fetch('http://localhost:3001/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          messageDiv.textContent = 'Registration successful! Redirecting to login...';
+          messageDiv.className = 'message success';
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 2000);
+        } else {
+          messageDiv.textContent = data.error || 'Registration failed.';
+          messageDiv.className = 'message error';
+        }
+      } catch (err) {
+        messageDiv.textContent = 'Server error. Please try again.';
+        messageDiv.className = 'message error';
+      }
+    });
+  </script>
+</body>
+</html>

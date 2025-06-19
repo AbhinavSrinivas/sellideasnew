@@ -64,6 +64,8 @@
 
         <div id="ideasList" class="ideas-list"></div>
 
+        <!-- Socket.IO client -->
+        <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
         <!-- Include messages.js -->
         <script src="messages.js"></script>
 
@@ -90,7 +92,10 @@
     </div>
 
     <script>
-        let token = localStorage.getItem('jwtToken');
+        // Set global API base URL once
+        window.API_BASE_URL = window.API_BASE_URL || 'http://localhost:3001';
+        
+        let token = localStorage.getItem('token');
 
         async function showLoginForm() {
             document.getElementById('loginForm').style.display = 'block';
@@ -118,7 +123,7 @@
             const password = document.getElementById('loginPassword').value;
 
             try {
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch(`${window.API_BASE_URL}/api/auth/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -140,7 +145,7 @@
                     throw new Error('Invalid response from server');
                 }
                 token = data.token;
-                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('token', token);
                 localStorage.setItem('userName', data.user.username);
                 
                 // Show success message
@@ -179,7 +184,7 @@
             console.log('Form values:', { username, email, password });
 
             try {
-                const response = await fetch('/api/auth/register', {
+                const response = await fetch(`${window.API_BASE_URL}/api/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -207,7 +212,7 @@
                     throw new Error('Invalid response from server');
                 }
                 token = data.token;
-                localStorage.setItem('jwtToken', token);
+                localStorage.setItem('token', token);
                 localStorage.setItem('userName', data.user.username);
                 
                 // Show success message
@@ -222,7 +227,7 @@
 
         async function fetchIdeas() {
             try {
-                const response = await fetch('/api/ideas', {
+                const response = await fetch(`${window.API_BASE_URL}/api/ideas`, {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
@@ -248,10 +253,10 @@
         }
 
         function renderIdea(idea, currentUser) {
-            const isOwner = currentUser && idea.owner && idea.owner._id === currentUser;
             const ownerName = idea.owner ? idea.owner.username : 'Unknown';
+            const isOwner = currentUser && idea.owner && idea.owner.username === currentUser;
             const isLoggedIn = !!currentUser;
-            const isNotOwnIdea = !isOwner && isLoggedIn;
+            const canMessage = isLoggedIn && !isOwner && idea.owner && idea.owner._id;
             
             return `
                 <div class="idea-card" data-id="${idea._id}">
@@ -265,7 +270,7 @@
                         ${isOwner ? `
                             <button class="btn btn-danger" onclick="deleteIdea('${idea._id}')">Delete</button>
                         ` : ''}
-                        ${isNotOwnIdea ? `
+                        ${canMessage ? `
                             <button class="btn btn-primary" onclick="startNewConversation('${idea._id}', '${idea.owner._id}')">
                                 Message
                             </button>
@@ -288,7 +293,7 @@
             const price = document.getElementById('ideaPrice').value;
 
             try {
-                const response = await fetch('/api/ideas', {
+                const response = await fetch(`${window.API_BASE_URL}/api/ideas`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -340,7 +345,7 @@
 
         async function deleteIdea(ideaId) {
             try {
-                const response = await fetch(`/api/ideas/${ideaId}`, {
+                const response = await fetch(`${window.API_BASE_URL}/api/ideas/${ideaId}`, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -361,7 +366,7 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            token = localStorage.getItem('jwtToken');
+            token = localStorage.getItem('token');
             if (!token) {
                 showLoginForm();
             } else {

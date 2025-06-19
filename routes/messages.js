@@ -66,66 +66,36 @@ router.get('/conversation/:ideaId/:otherUserId', auth, async (req, res) => {
 router.get('/conversations', auth, async (req, res) => {
     try {
         const userId = req.user.id;
-        
-        // Get all unique conversation IDs for this user
-        const conversations = await Message.aggregate([
-            {
-                $match: {
-                    $or: [
-                        { sender: userId },
-                        { recipient: userId }
-                    ]
-                }
-            },
-            {
-                $sort: { createdAt: -1 }
-            },
-            {
-                $group: {
-                    _id: '$conversationId',
-                    lastMessage: { $first: '$$ROOT' },
-                    idea: { $first: '$idea' },
-                    otherUser: {
-                        $cond: [
-                            { $eq: ['$sender', userId] },
-                            '$recipient',
-                            '$sender'
-                        ]
-                    }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'otherUser',
-                    foreignField: '_id',
-                    as: 'otherUser'
-                }
-            },
-            {
-                $unwind: '$otherUser'
-            },
-            {
-                $lookup: {
-                    from: 'ideas',
-                    localField: 'idea',
-                    foreignField: '_id',
-                    as: 'idea'
-                }
-            },
-            {
-                $unwind: '$idea'
-            },
-            {
-                $project: {
-                    'otherUser.password': 0,
-                    'otherUser.email': 0,
-                    'otherUser.__v': 0
-                }
-            }
-        ]);
 
-        res.json(conversations);
+        // Grab all messages for the current user, newest first
+        const messages = await Message.find({
+            $or: [{ sender: userId }, { recipient: userId }]
+        })
+            .sort({ createdAt: -1 })
+            .populate('sender', 'username')
+            .populate('recipient', 'username')
+            .populate('idea')
+            .lean();
+
+        // Build a map of conversationId -> lastMessage
+        const convoMap = new Map();
+        for (const msg of messages) {
+            if (!convoMap.has(msg.conversationId)) {
+                // Determine the other user object
+                const otherUser = msg.sender._id.toString() === userId ? msg.recipient : msg.sender;
+                convoMap.set(msg.conversationId, {
+                    _id: msg.conversationId,
+                    lastMessage: msg,
+                    idea: msg.idea || null,
+                    otherUser: {
+                        _id: otherUser._id,
+                        username: otherUser.username
+                    }
+                });
+            }
+        }
+
+        res.json(Array.from(convoMap.values()));
     } catch (error) {
         console.error('Error fetching conversations:', error);
         res.status(500).json({ error: 'Error fetching conversations' });
